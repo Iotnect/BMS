@@ -1,7 +1,9 @@
+import { Commissioning } from '@/components/bms/commissioning';
 import { Empty, Filter, Status } from '@/components/bms/controls';
 import { AlarmEditor, EquipmentEditor, PreferencesForm, ScheduleEditor, dayNames } from '@/components/bms/editors';
 import { Navigation, navItems } from '@/components/bms/navigation';
 import { TrendChart } from '@/components/bms/trend-chart';
+import { trendWindow } from '@/components/bms/trend-window';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
@@ -9,7 +11,7 @@ import { Label } from '@/components/ui/label';
 import { Sheet, SheetContent, SheetDescription, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { type Alarm, type Equipment, type Schedule, type WorkspaceProps, dateTime, number, temperature } from '@/types/bms';
-import { Head, Link, router } from '@inertiajs/react';
+import { Head, Link, router, usePage } from '@inertiajs/react';
 import {
     ArrowDownRight,
     Bell,
@@ -43,6 +45,7 @@ const titles = {
     equipment: 'Equipment',
     alarms: 'Alarm management',
     schedules: 'Operating schedules',
+    commissioning: 'Commissioning',
     reports: 'Reports',
     activity: 'Activity log',
     preferences: 'Workspace settings',
@@ -54,6 +57,7 @@ const subtitles = {
     equipment: 'Inspect equipment, point values and operating setpoints.',
     alarms: 'Review conditions, prioritize responses and record operator actions.',
     schedules: 'Plan weekly operating hours for your building systems.',
+    commissioning: 'Assign findings, track corrective work and record verification before closeout.',
     reports: 'Take your building measurements with you.',
     activity: 'A record of changes made in this workspace.',
     preferences: 'Configure your workspace, units and display preferences.',
@@ -65,9 +69,26 @@ const rangeOptions = [
     { value: '7d', label: 'Last 7 days' },
     { value: '30d', label: 'Last 30 days' },
 ];
+const alarmTabs = ['active', 'unacknowledged', 'returned', 'acknowledged', 'all'];
+const alarmPriority = { Critical: 0, Warning: 1, Info: 2 };
+
+function compareAlarmPriority(a: Alarm, b: Alarm) {
+    return (
+        Number(!!a.returned_at) - Number(!!b.returned_at) ||
+        alarmPriority[a.severity] - alarmPriority[b.severity] ||
+        Number(!!a.acknowledged_at) - Number(!!b.acknowledged_at) ||
+        a.occurred_at.localeCompare(b.occurred_at)
+    );
+}
+
+function alarmState(value: string | null) {
+    return value && alarmTabs.includes(value) ? value : 'active';
+}
 
 export default function Workspace(props: WorkspaceProps) {
     const { view, equipment, alarms, samples, preferences, schedules, range, activity } = props;
+    const { url } = usePage();
+    const query = new URLSearchParams(url.split('?')[1]);
     const [menuOpen, setMenuOpen] = useState(false);
     const [alarm, setAlarm] = useState<Alarm | null>(null);
     const [device, setDevice] = useState<Equipment | null>(null);
@@ -82,7 +103,8 @@ export default function Workspace(props: WorkspaceProps) {
     const [floor, setFloor] = useState(() => new URLSearchParams(window.location.search).get('floor') ?? 'all');
     const [status, setStatus] = useState('all');
     const [severity, setSeverity] = useState('all');
-    const [alarmTab, setAlarmTab] = useState('active');
+    const [alarmTab, setAlarmTab] = useState(() => alarmState(query.get('state')));
+    const [alarmSort, setAlarmSort] = useState('priority');
     const [activitySearch, setActivitySearch] = useState('');
     useEffect(() => {
         document.documentElement.classList.toggle('dark', preferences.theme === 'dark');
@@ -92,11 +114,13 @@ export default function Workspace(props: WorkspaceProps) {
         setNotice(props.flash.success ?? '');
     }, [props.flash]);
     useEffect(() => {
-        setSearch(new URLSearchParams(window.location.search).get('search') ?? '');
-        setFloor(new URLSearchParams(window.location.search).get('floor') ?? 'all');
-        setSystem(new URLSearchParams(window.location.search).get('system') ?? 'all');
+        const params = new URLSearchParams(url.split('?')[1]);
+        setSearch(params.get('search') ?? '');
+        setFloor(params.get('floor') ?? 'all');
+        setSystem(params.get('system') ?? 'all');
+        setAlarmTab(alarmState(params.get('state')));
         setStatus('all');
-    }, [view]);
+    }, [url]);
     useEffect(() => {
         const showError = (message: string) => {
             setBusy(false);
@@ -126,7 +150,29 @@ export default function Workspace(props: WorkspaceProps) {
     const online = equipment.filter((item) => item.status !== 'Offline').length;
     const consumed = samples.reduce((sum, item) => sum + item.energy_kwh, 0);
     const baseline = samples.reduce((sum, item) => sum + item.baseline_kwh, 0);
-    const saving = baseline ? ((baseline - consumed) / baseline) * 100 : 0;
+    const trend = trendWindow(samples, props.snapshotAt, range);
+    const saving = trend.complete && baseline > 0 ? ((baseline - consumed) / baseline) * 100 : null;
+    const comparisonText =
+        saving === null
+            ? trend.complete
+                ? 'No baseline comparison available'
+                : 'Comparison needs complete hourly data'
+            : saving === 0
+              ? 'At baseline'
+              : `${number(Math.abs(saving), 1)}% ${saving > 0 ? 'below' : 'above'} baseline`;
+    const coverage = (
+        <div className="panel-foot trend-coverage">
+            <Clock3 size={15} aria-hidden="true" />
+            <span>
+                <strong>
+                    {trend.matched} of {trend.expected} expected hourly readings
+                </strong>
+                {trend.missing > 0 && ` · ${trend.missing} missing`}
+                {trend.offCadence > 0 && ` · ${trend.offCadence} off the hourly cadence`}
+                {!trend.complete && samples.length > 0 && ' · Totals reflect recorded data only.'}
+            </span>
+        </div>
+    );
     const lastSample = samples.at(-1);
     const floors = ['Ground', 'Level 01', 'Level 02', 'Level 03', 'Rooftop'].filter((value) => equipment.some((item) => item.floor === value));
     const visibleEquipment = equipment.filter(
@@ -136,16 +182,19 @@ export default function Workspace(props: WorkspaceProps) {
             (status === 'all' || item.status === status) &&
             `${item.tag} ${item.name} ${item.location} ${item.floor}`.toLowerCase().includes(search.toLowerCase()),
     );
-    const visibleAlarms = alarms.filter(
-        (item) =>
-            (severity === 'all' || item.severity === severity) &&
-            (floor === 'all' || item.equipment.floor === floor) &&
-            (alarmTab === 'all' ||
-                (alarmTab === 'active' && !item.returned_at) ||
-                (alarmTab === 'unacknowledged' && !item.acknowledged_at) ||
-                (alarmTab === 'acknowledged' && item.acknowledged_at)) &&
-            `${item.message} ${item.equipment.tag}`.toLowerCase().includes(search.toLowerCase()),
-    );
+    const visibleAlarms = alarms
+        .filter(
+            (item) =>
+                (severity === 'all' || item.severity === severity) &&
+                (floor === 'all' || item.equipment.floor === floor) &&
+                (alarmTab === 'all' ||
+                    (alarmTab === 'active' && !item.returned_at) ||
+                    (alarmTab === 'unacknowledged' && !item.acknowledged_at) ||
+                    (alarmTab === 'returned' && item.returned_at) ||
+                    (alarmTab === 'acknowledged' && item.acknowledged_at)) &&
+                `${item.message} ${item.equipment.tag}`.toLowerCase().includes(search.toLowerCase()),
+        )
+        .sort(alarmSort === 'newest' ? (a, b) => b.occurred_at.localeCompare(a.occurred_at) : compareAlarmPriority);
     const href = navItems.find((item) => item.view === view)?.href ?? '/dashboard';
     const changeRange = (value: string) => router.get(href, { range: value }, { preserveScroll: true, preserveState: true });
     const refresh = () => {
@@ -170,7 +219,7 @@ export default function Workspace(props: WorkspaceProps) {
     const alarmTable = (items: Alarm[], compact = false) => (
         <div className="table-scroll">
             <table className="data-table alarm-table">
-                <caption className="sr-only">{compact ? 'Recent building alarms' : 'Filtered alarm list'}</caption>
+                <caption className="sr-only">{compact ? 'Alarms awaiting acknowledgment' : 'Filtered alarm list'}</caption>
                 <thead>
                     <tr>
                         <th>Priority / condition</th>
@@ -192,7 +241,11 @@ export default function Workspace(props: WorkspaceProps) {
                             <td>
                                 <Status value={item.severity} />
                                 <strong>{item.message}</strong>
-                                {compact && <span className="muted small">{dateTime(item.occurred_at)}</span>}
+                                {compact && (
+                                    <span className="muted small">
+                                        {item.returned_at ? 'Returned' : 'Active'} · {dateTime(item.occurred_at)}
+                                    </span>
+                                )}
                             </td>
                             <td>
                                 <span className="equipment-tag">{item.equipment.tag}</span>
@@ -273,19 +326,20 @@ export default function Workspace(props: WorkspaceProps) {
             </div>
             <div className="energy-summary">
                 <strong>
-                    {number(consumed)}
+                    {samples.length ? number(consumed) : '—'}
                     <span> kWh</span>
                 </strong>
-                <span className={`comparison ${saving < 0 ? 'negative' : ''}`}>
-                    <ArrowDownRight size={15} aria-hidden="true" />
-                    {number(Math.abs(saving), 1)}% {saving >= 0 ? 'below' : 'above'} baseline
+                <span className={`comparison ${saving !== null && saving < 0 ? 'negative' : ''}`}>
+                    {saving !== null && saving > 0 && <ArrowDownRight size={15} aria-hidden="true" />}
+                    {comparisonText}
                 </span>
             </div>
-            <TrendChart samples={samples} range={range} />
+            <TrendChart window={trend} range={range} />
+            {coverage}
             <div className="chart-caption">
                 {range === '24h'
-                    ? 'Each point represents energy used in one hour.'
-                    : 'Daily totals include partial days at the start and end of the period.'}
+                    ? 'Gaps mark missing hourly readings.'
+                    : 'Gaps mark days with missing readings. The first and last day may cover part of a day.'}
                 <Link href="/analytics">
                     View analytics
                     <ChevronRight size={13} aria-hidden="true" />
@@ -353,7 +407,7 @@ export default function Workspace(props: WorkspaceProps) {
                             aria-label={`${unacknowledged.length} unacknowledged alarms`}
                             className="notification-button"
                         >
-                            <Link href="/alarms">
+                            <Link href="/alarms?state=unacknowledged">
                                 <Bell size={19} />
                                 <span aria-hidden="true">{unacknowledged.length}</span>
                             </Link>
@@ -424,11 +478,11 @@ export default function Workspace(props: WorkspaceProps) {
                                         <Zap size={17} aria-hidden="true" />
                                     </div>
                                     <div className="metric-value">
-                                        {number(consumed)}
+                                        {samples.length ? number(consumed) : '—'}
                                         <span>kWh</span>
                                     </div>
                                     <div className="metric-foot">
-                                        <span className="positive">{number(saving, 1)}% below baseline</span>
+                                        <span>{comparisonText}</span>
                                         <span>{rangeOptions.find((item) => item.value === range)?.label}</span>
                                     </div>
                                 </article>
@@ -472,7 +526,7 @@ export default function Workspace(props: WorkspaceProps) {
                                         <span className="danger-text">
                                             {activeAlarms.filter((item) => item.severity === 'Critical').length} critical
                                         </span>
-                                        <Link href="/alarms">{unacknowledged.length} unacknowledged</Link>
+                                        <Link href="/alarms?state=unacknowledged">{unacknowledged.length} unacknowledged</Link>
                                     </div>
                                 </article>
                             </section>
@@ -485,23 +539,14 @@ export default function Workspace(props: WorkspaceProps) {
                                             <h2>
                                                 Needs your attention <span className="count-square">{unacknowledged.length}</span>
                                             </h2>
-                                            <p className="muted small">Unacknowledged events, highest priority first</p>
+                                            <p className="muted small">Unacknowledged events, active conditions first</p>
                                         </div>
                                         <Link className="text-link" href="/alarms">
                                             All alarms
                                             <ChevronRight size={14} aria-hidden="true" />
                                         </Link>
                                     </div>
-                                    {alarmTable(
-                                        [...unacknowledged]
-                                            .sort(
-                                                (a, b) =>
-                                                    ['Critical', 'Warning', 'Info'].indexOf(a.severity) -
-                                                    ['Critical', 'Warning', 'Info'].indexOf(b.severity),
-                                            )
-                                            .slice(0, 3),
-                                        true,
-                                    )}
+                                    {alarmTable(unacknowledged.sort(compareAlarmPriority).slice(0, 3), true)}
                                 </section>
                                 <section className="panel floor-panel">
                                     <div className="panel-heading">
@@ -560,25 +605,25 @@ export default function Workspace(props: WorkspaceProps) {
                         <>
                             <div className="analytics-summary">
                                 <div>
-                                    <span className="muted">Period consumption</span>
+                                    <span className="muted">{trend.complete ? 'Period consumption' : 'Recorded consumption'}</span>
                                     <strong>
-                                        {number(consumed)} <small>kWh</small>
+                                        {samples.length ? number(consumed) : '—'} <small>kWh</small>
                                     </strong>
                                 </div>
                                 <div>
                                     <span className="muted">Baseline consumption</span>
                                     <strong>
-                                        {number(baseline)} <small>kWh</small>
+                                        {trend.complete ? number(baseline) : '—'} <small>kWh</small>
                                     </strong>
                                 </div>
                                 <div>
                                     <span className="muted">Difference to baseline</span>
                                     <strong className="positive">
-                                        {number(baseline - consumed)} <small>kWh</small>
+                                        {saving !== null ? number(baseline - consumed) : '—'} <small>kWh</small>
                                     </strong>
                                 </div>
                                 <div>
-                                    <span className="muted">Peak hourly energy</span>
+                                    <span className="muted">Peak recorded energy</span>
                                     <strong>
                                         {samples.length ? number(Math.max(...samples.map((item) => item.energy_kwh)), 1) : '—'} <small>kWh</small>
                                     </strong>
@@ -596,7 +641,7 @@ export default function Workspace(props: WorkspaceProps) {
                                         </div>
                                         <Thermometer size={19} aria-hidden="true" />
                                     </div>
-                                    <TrendChart samples={samples} range={range} metric="temperature" unit={preferences.temperatureUnit} />
+                                    <TrendChart window={trend} range={range} metric="temperature" unit={preferences.temperatureUnit} />
                                 </section>
                                 <section className="panel">
                                     <div className="panel-heading">
@@ -606,7 +651,7 @@ export default function Workspace(props: WorkspaceProps) {
                                         </div>
                                         <Droplets size={19} aria-hidden="true" />
                                     </div>
-                                    <TrendChart samples={samples} range={range} metric="humidity" />
+                                    <TrendChart window={trend} range={range} metric="humidity" />
                                 </section>
                             </div>
                             <section className="panel target-panel">
@@ -615,7 +660,9 @@ export default function Workspace(props: WorkspaceProps) {
                                     <p className="muted">
                                         {number(preferences.dailyTarget)} kWh per 24 hours.{' '}
                                         {range === '24h'
-                                            ? `${number((consumed / preferences.dailyTarget) * 100)}% of target used in this period.`
+                                            ? trend.complete
+                                                ? `${number((consumed / preferences.dailyTarget) * 100)}% of target used in this period.`
+                                                : 'Target comparison needs complete hourly data.'
                                             : 'Select Last 24 hours to compare consumption against this target.'}
                                     </p>
                                 </div>
@@ -762,6 +809,7 @@ export default function Workspace(props: WorkspaceProps) {
                                         <TabsList>
                                             <TabsTrigger value="active">Active ({activeAlarms.length})</TabsTrigger>
                                             <TabsTrigger value="unacknowledged">Unacknowledged</TabsTrigger>
+                                            <TabsTrigger value="returned">Returned</TabsTrigger>
                                             <TabsTrigger value="acknowledged">Acknowledged</TabsTrigger>
                                             <TabsTrigger value="all">All events</TabsTrigger>
                                         </TabsList>
@@ -793,8 +841,18 @@ export default function Workspace(props: WorkspaceProps) {
                                             onChange={setFloor}
                                             options={[{ value: 'all', label: 'All floors' }, ...floors.map((value) => ({ value, label: value }))]}
                                         />
+                                        <Filter
+                                            id="alarm-sort"
+                                            label="Sort"
+                                            value={alarmSort}
+                                            onChange={setAlarmSort}
+                                            options={[
+                                                { value: 'priority', label: 'Active first, then priority' },
+                                                { value: 'newest', label: 'Newest first' },
+                                            ]}
+                                        />
                                     </div>
-                                    {['active', 'unacknowledged', 'acknowledged', 'all'].map((tab) => (
+                                    {alarmTabs.map((tab) => (
                                         <TabsContent key={tab} value={tab}>
                                             {alarmTable(visibleAlarms)}
                                         </TabsContent>
@@ -874,6 +932,16 @@ export default function Workspace(props: WorkspaceProps) {
                         </>
                     )}
 
+                    {view === 'commissioning' && (
+                        <Commissioning
+                            issues={props.commissioningIssues}
+                            equipment={equipment}
+                            alarms={alarms}
+                            source={alarms.find((item) => String(item.id) === query.get('alarm'))}
+                            siteDate={props.siteDate}
+                        />
+                    )}
+
                     {view === 'reports' && (
                         <>
                             <section className="panel report-intro">
@@ -888,18 +956,26 @@ export default function Workspace(props: WorkspaceProps) {
                                     </p>
                                     <span className="small muted">CSV format · {samples.length} hourly records · demonstration data</span>
                                 </div>
-                                <Button asChild disabled={!samples.length}>
-                                    <a href={`/reports/energy.csv?range=${range}`}>
+                                {samples.length ? (
+                                    <Button asChild>
+                                        <a href={`/reports/energy.csv?range=${range}`}>
+                                            <Download aria-hidden="true" />
+                                            Download CSV
+                                        </a>
+                                    </Button>
+                                ) : (
+                                    <Button disabled>
                                         <Download aria-hidden="true" />
                                         Download CSV
-                                    </a>
-                                </Button>
+                                    </Button>
+                                )}
                             </section>
                             <section className="panel">
                                 <div className="panel-heading">
                                     <h2>Data preview</h2>
                                     <span className="small muted">Most recent 10 samples</span>
                                 </div>
+                                {coverage}
                                 <div className="table-scroll">
                                     <table className="data-table">
                                         <caption className="sr-only">Export preview, most recent hourly samples</caption>

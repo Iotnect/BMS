@@ -6,7 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import { type Alarm, type Equipment, type Preferences, type Schedule, dateTime, temperature } from '@/types/bms';
-import { useForm } from '@inertiajs/react';
+import { Link, useForm } from '@inertiajs/react';
 import { Filter, FormErrors, Status } from './controls';
 
 export function AlarmEditor({ alarm, close }: { alarm: Alarm; close: () => void }) {
@@ -31,6 +31,12 @@ export function AlarmEditor({ alarm, close }: { alarm: Alarm; close: () => void 
                         <dt>Condition</dt>
                         <dd>{alarm.returned_at ? 'Returned to normal' : 'Active'}</dd>
                     </div>
+                    {alarm.returned_at && (
+                        <div>
+                            <dt>Returned (MYT)</dt>
+                            <dd>{dateTime(alarm.returned_at)}</dd>
+                        </div>
+                    )}
                 </dl>
                 <div className="instruction">
                     <strong>Recommended response</strong>
@@ -69,6 +75,11 @@ export function AlarmEditor({ alarm, close }: { alarm: Alarm; close: () => void 
                         </Button>
                     </form>
                 )}
+                <Button asChild variant="outline">
+                    <Link href={`/commissioning?alarm=${alarm.id}`} onClick={close}>
+                        Track commissioning issue
+                    </Link>
+                </Button>
             </DialogContent>
         </Dialog>
     );

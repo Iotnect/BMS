@@ -3,8 +3,10 @@
 namespace Tests\Feature;
 
 use App\Models\Alarm;
+use App\Models\CommissioningIssue;
 use App\Models\Equipment;
 use App\Models\OperatingSchedule;
+use App\Models\TrendSample;
 use App\Models\User;
 use Database\Seeders\BmsSeeder;
 use Illuminate\Foundation\Http\Middleware\ValidateCsrfToken;
@@ -24,10 +26,11 @@ class BmsTest extends TestCase
 
     public function test_workspace_pages_require_authentication(): void
     {
-        foreach (['dashboard', 'analytics', 'equipment', 'alarms', 'schedules', 'reports', 'activity', 'preferences', 'integrations', 'reports/energy.csv'] as $page) {
+        foreach (['dashboard', 'analytics', 'equipment', 'alarms', 'schedules', 'commissioning', 'reports', 'activity', 'preferences', 'integrations', 'reports/energy.csv'] as $page) {
             $this->get('/'.$page)->assertRedirect('/login');
         }
         $this->post('/alarms/1/acknowledge', ['note' => 'Inspecting coil'])->assertRedirect('/login');
+        $this->post('/commissioning')->assertRedirect('/login');
         $this->assertDatabaseCount('activity_logs', 0);
     }
 
@@ -58,6 +61,52 @@ class BmsTest extends TestCase
     {
         $this->actingAs(User::factory()->create())->post('/alarms/1/acknowledge', ['note' => ''])->assertSessionHasErrors('note');
         $this->assertNull(Alarm::findOrFail(1)->acknowledged_at);
+    }
+
+    public function test_commissioning_closeout_requires_verification_and_protects_against_stale_edits(): void
+    {
+        $user = User::factory()->create();
+        $alarm = Alarm::firstOrFail();
+        $data = [
+            'title' => 'Verify supply air response',
+            'description' => 'Valve failed to respond during the functional test.',
+            'responsible_party' => 'Controls contractor',
+            'equipment_id' => Equipment::whereKeyNot($alarm->equipment_id)->firstOrFail()->id,
+            'due_on' => '2026-11-30',
+            'status' => 'Open',
+        ];
+        $this->actingAs($user)->post('/commissioning', $data + ['alarm_id' => $alarm->id, 'revision' => null])->assertRedirect('/commissioning');
+        $issue = CommissioningIssue::firstOrFail();
+        $this->assertSame($alarm->equipment_id, $issue->equipment_id);
+        $this->assertSame($alarm->id, $issue->alarm_id);
+        $this->assertSame($user->id, $issue->reported_by);
+
+        $url = '/commissioning/'.$issue->id;
+        $closeout = array_replace($data, ['status' => 'Resolved', 'revision' => 1]);
+        $this->put($url, $closeout)->assertSessionHasErrors('verification');
+        $this->assertSame('Open', $issue->fresh()->status);
+        $verification = 'Replaced actuator and confirmed full stroke during retest FT-02.';
+        $this->put($url, $closeout + ['verification' => $verification, 'alarm_id' => null])->assertRedirect('/commissioning');
+        $this->get('/commissioning')->assertInertia(fn (Assert $page) => $page
+            ->where('commissioningIssues.0.verification', $verification)
+            ->where('commissioningIssues.0.verifier.name', $user->name)
+            ->where('commissioningIssues.0.revision', 2));
+        $this->put($url, $data + ['revision' => 1])->assertSessionHasErrors('revision');
+        $this->assertSame('Resolved', $issue->fresh()->status);
+        $this->put($url, $data + ['revision' => 2])->assertRedirect('/commissioning');
+        $this->assertNull($issue->fresh()->resolved_at);
+        $this->assertNull($issue->fresh()->verification);
+        $this->assertDatabaseHas('activity_logs', ['action' => 'Commissioning issue updated', 'subject' => 'CX-'.$issue->id, 'user_id' => $user->id]);
+        $this->assertNull($alarm->fresh()->returned_at);
+    }
+
+    public function test_an_empty_trend_archive_loads_and_exports_without_inventing_samples(): void
+    {
+        TrendSample::query()->delete();
+        $this->actingAs(User::factory()->create());
+        $this->get('/analytics')->assertInertia(fn (Assert $page) => $page->where('snapshotAt', null)->has('samples', 0));
+        $csv = $this->get('/reports/energy.csv')->assertOk()->streamedContent();
+        $this->assertCount(1, explode("\n", trim($csv)));
     }
 
     public function test_demo_setpoints_are_bounded_and_read_only_points_cannot_be_changed(): void

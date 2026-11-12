@@ -37,9 +37,9 @@ export function Filter({
 export function Status({ value }: { value: string }) {
     const tone = ['Critical', 'Alarm'].includes(value)
         ? 'danger'
-        : ['Warning', 'Offline', 'Paused', 'Disconnected'].includes(value) || value.includes('attention')
+        : ['Warning', 'Offline', 'Paused', 'Disconnected', 'Overdue'].includes(value) || value.includes('attention')
           ? 'warning'
-          : ['Online', 'Enabled', 'Acknowledged', 'Returned'].includes(value)
+          : ['Online', 'Enabled', 'Acknowledged', 'Returned', 'Resolved'].includes(value)
             ? 'good'
             : 'neutral';
     return (

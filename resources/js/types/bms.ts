@@ -1,4 +1,14 @@
-export type View = 'overview' | 'analytics' | 'equipment' | 'alarms' | 'schedules' | 'reports' | 'activity' | 'preferences' | 'integrations';
+export type View =
+    | 'overview'
+    | 'analytics'
+    | 'equipment'
+    | 'alarms'
+    | 'schedules'
+    | 'commissioning'
+    | 'reports'
+    | 'activity'
+    | 'preferences'
+    | 'integrations';
 export interface Equipment {
     id: number;
     tag: string;
@@ -42,6 +52,25 @@ export interface Schedule {
     end_time: string;
     enabled: boolean;
 }
+
+export const issueStatuses = ['Open', 'In progress', 'Resolved'] as const;
+
+export interface CommissioningIssue {
+    id: number;
+    title: string;
+    description: string;
+    responsible_party: string;
+    equipment_id: number | null;
+    alarm_id: number | null;
+    due_on: string | null;
+    status: (typeof issueStatuses)[number];
+    verification: string | null;
+    revision: number;
+    created_at: string;
+    resolved_at: string | null;
+    reporter: { name: string } | null;
+    verifier: { name: string } | null;
+}
 export interface Preferences {
     siteName: string;
     theme: 'light' | 'dark';
@@ -65,9 +94,11 @@ export interface WorkspaceProps {
     alarms: Alarm[];
     samples: Sample[];
     schedules: Schedule[];
+    commissioningIssues: CommissioningIssue[];
     preferences: Preferences;
     activity: Activity[];
     snapshotAt: string | null;
+    siteDate: string;
     flash: { success?: string };
     auth: { user: { name: string; email: string } };
 }

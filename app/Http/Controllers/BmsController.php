@@ -3,29 +3,33 @@
 namespace App\Http\Controllers;
 
 use App\Models\Alarm;
+use App\Models\CommissioningIssue;
 use App\Models\Equipment;
 use App\Models\OperatingSchedule;
 use App\Models\TrendSample;
 use App\Models\User;
 use Carbon\Carbon;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class BmsController extends Controller
 {
+    private const RANGE_HOURS = ['24h' => 24, '7d' => 168, '30d' => 720];
+
     public function index(Request $request, string $view = 'overview'): Response
     {
-        $range = $request->validate(['range' => ['nullable', Rule::in(['24h', '7d', '30d'])]])['range'] ?? '24h';
-        $hours = ['24h' => 24, '7d' => 168, '30d' => 720][$range];
+        $range = $request->validate(['range' => ['nullable', Rule::in(array_keys(self::RANGE_HOURS))]])['range'] ?? '24h';
         $latest = TrendSample::max('recorded_at');
-        $samples = $latest ? TrendSample::where('recorded_at', '>', Carbon::parse($latest)->subHours($hours))->orderBy('recorded_at')->get() : collect();
+        $samples = $this->trendQuery($range, $latest)->get();
         $settings = DB::table('bms_settings')->where('user_id', $request->user()->id)->value('preferences');
 
         return Inertia::render('bms/workspace', [
@@ -35,10 +39,14 @@ class BmsController extends Controller
             'equipment' => Equipment::orderBy('tag')->get(),
             'alarms' => Alarm::with(['equipment', 'operator:id,name'])->orderByDesc('occurred_at')->get(),
             'samples' => $samples,
+            'commissioningIssues' => fn () => $view === 'commissioning'
+                ? CommissioningIssue::with(['reporter:id,name', 'verifier:id,name'])->latest('id')->get()
+                : [],
             'schedules' => OperatingSchedule::orderBy('id')->get(),
             'preferences' => array_merge(['siteName' => 'Meridian Tower', 'theme' => 'light', 'temperatureUnit' => 'C', 'dailyTarget' => 4000, 'compact' => false], $settings ? json_decode($settings, true) : []),
             'activity' => DB::table('activity_logs')->leftJoin('users', 'activity_logs.user_id', '=', 'users.id')->select('activity_logs.*', 'users.name as operator')->orderByDesc('activity_logs.id')->limit(50)->get(),
-            'snapshotAt' => $latest,
+            'snapshotAt' => $latest ? Carbon::parse($latest)->toISOString() : null,
+            'siteDate' => now('Asia/Kuala_Lumpur')->toDateString(),
             'flash' => ['success' => $request->session()->get('success')],
         ]);
     }
@@ -111,6 +119,61 @@ class BmsController extends Controller
         return back()->with('success', 'Schedule deleted.');
     }
 
+    public function saveIssue(Request $request, ?CommissioningIssue $issue = null): RedirectResponse
+    {
+        $data = $request->validate([
+            'title' => ['required', 'string', 'max:120'],
+            'description' => ['required', 'string', 'max:3000'],
+            'responsible_party' => ['required', 'string', 'max:120'],
+            'equipment_id' => ['nullable', 'integer', 'exists:equipment,id'],
+            'alarm_id' => [$issue ? 'prohibited' : 'sometimes', 'nullable', 'integer', 'exists:alarms,id'],
+            'due_on' => ['nullable', 'date_format:Y-m-d'],
+            'status' => ['required', Rule::in(CommissioningIssue::STATUSES)],
+            'verification' => ['required_if:status,Resolved', 'nullable', 'string', 'max:3000'],
+            'revision' => [$issue ? 'required' : 'prohibited', 'nullable', 'integer', 'min:1'],
+        ]);
+
+        DB::transaction(function () use ($request, $issue, $data) {
+            $fields = collect($data)->except(['alarm_id', 'revision'])->all();
+            $alarm = Alarm::find($issue?->alarm_id ?? $data['alarm_id'] ?? null);
+            if ($alarm) {
+                $fields['equipment_id'] = $alarm->equipment_id;
+            }
+
+            if ($data['status'] !== 'Resolved') {
+                $fields['verification'] = null;
+                $fields['resolved_at'] = null;
+                $fields['resolved_by'] = null;
+            } elseif ($issue?->status !== 'Resolved' || $issue->verification !== $data['verification']) {
+                $fields['resolved_at'] = now();
+                $fields['resolved_by'] = $request->user()->id;
+            }
+
+            if ($issue) {
+                $updated = $issue->revision === (int) $data['revision']
+                    && CommissioningIssue::whereKey($issue->id)->where('revision', $issue->revision)
+                        ->update($fields + ['revision' => $issue->revision + 1]);
+                if (! $updated) {
+                    throw ValidationException::withMessages(['revision' => 'This issue changed while you were editing. Close and reopen it to review the latest version.']);
+                }
+                $saved = $issue->fresh();
+            } else {
+                $saved = CommissioningIssue::create($fields + [
+                    'alarm_id' => $alarm?->id,
+                    'reported_by' => $request->user()->id,
+                ]);
+            }
+
+            $auditFields = ['title', 'description', 'responsible_party', 'equipment_id', 'alarm_id', 'due_on', 'status', 'verification', 'resolved_at', 'resolved_by'];
+            $this->log($request, $issue ? 'Commissioning issue updated' : 'Commissioning issue logged', 'CX-'.$saved->id, [
+                'before' => $issue?->only($auditFields),
+                'after' => $saved->only($auditFields),
+            ]);
+        });
+
+        return redirect()->route('bms.commissioning')->with('success', $issue ? 'Commissioning issue updated.' : 'Commissioning issue logged.');
+    }
+
     public function settings(Request $request): RedirectResponse
     {
         $data = $request->validate([
@@ -130,12 +193,8 @@ class BmsController extends Controller
 
     public function export(Request $request): StreamedResponse
     {
-        $range = $request->validate(['range' => ['nullable', Rule::in(['24h', '7d', '30d'])]])['range'] ?? '24h';
-        $latest = TrendSample::max('recorded_at');
-        $query = TrendSample::orderBy('recorded_at');
-        if ($latest) {
-            $query->where('recorded_at', '>', Carbon::parse($latest)->subHours(['24h' => 24, '7d' => 168, '30d' => 720][$range]));
-        }
+        $range = $request->validate(['range' => ['nullable', Rule::in(array_keys(self::RANGE_HOURS))]])['range'] ?? '24h';
+        $query = $this->trendQuery($range, TrendSample::max('recorded_at'));
 
         return response()->streamDownload(function () use ($query) {
             $file = fopen('php://output', 'w');
@@ -145,6 +204,17 @@ class BmsController extends Controller
             }
             fclose($file);
         }, 'bms-energy-'.$range.'.csv', ['Content-Type' => 'text/csv; charset=UTF-8']);
+    }
+
+    private function trendQuery(string $range, ?string $latest): Builder
+    {
+        if ($latest === null) {
+            return TrendSample::whereNull('recorded_at');
+        }
+
+        return TrendSample::orderBy('recorded_at')
+            ->where('recorded_at', '<=', $latest)
+            ->where('recorded_at', '>', Carbon::parse($latest)->startOfHour()->subHours(self::RANGE_HOURS[$range]));
     }
 
     private function log(Request $request, string $action, string $subject, array $details): void

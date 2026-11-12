@@ -687,6 +687,13 @@ h2 {
     align-items: center;
     font-size: 0.68rem;
 }
+.trend-coverage {
+    font-size: 0.78rem;
+    line-height: 1.5;
+}
+.trend-coverage svg {
+    flex: none;
+}
 .status {
     display: inline-flex;
     align-items: center;
@@ -1050,6 +1057,12 @@ fieldset legend {
 }
 .schedule-table td {
     white-space: nowrap;
+}
+.commissioning-table td:first-child {
+    min-width: 13rem;
+}
+.commissioning-table td {
+    overflow-wrap: anywhere;
 }
 .bms-dialog {
     width: calc(100% - 32px);
@@ -1417,21 +1430,34 @@ fieldset legend {
         display: flex;
         align-items: center;
         gap: 8px;
+        padding-inline: 10px 3px;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        background: var(--background);
         color: var(--muted-foreground);
+    }
+    .global-search:has(input:focus-visible) {
+        outline: 2px solid var(--ring);
+        outline-offset: 2px;
     }
     .global-search input {
         width: 155px;
+        height: 36px;
         padding: 0;
         border: none;
+        background: transparent;
         box-shadow: none;
         font-size: 0.78rem;
     }
+    .global-search input:focus-visible {
+        outline: none;
+    }
     .global-search button {
-        width: 24px;
-        min-width: 24px;
+        width: 30px;
+        height: 30px;
     }
     .global-search > svg {
-        width: 15px;
+        flex: none;
     }
     .topbar-actions {
         gap: 20px;

@@ -54,16 +54,19 @@ Open `/up` to check that Laravel boots. Visit `/login` and select **Open demo wo
 ## Workspace pages
 
 - Overview: energy consumption, environmental readings, equipment availability, alarm attention list and floor summaries.
-- Energy & analytics: 24-hour, seven-day and thirty-day trends with baseline comparison, indoor temperature and humidity.
+- Energy & analytics: 24-hour, seven-day and thirty-day trends, hourly coverage and gap indicators, baseline comparison, indoor temperature and humidity.
 - Equipment: searchable inventory, filters, inspection and local simulated HVAC setpoint changes.
-- Alarms: independent active/returned and acknowledged/unacknowledged states; response notes and operator identity.
+- Alarms: priority triage and returned-event history, with independent condition and acknowledgment states, response notes and operator identity.
 - Schedules: weekly program creation, editing, enabling, pausing and deletion. Same-day operating periods use Malaysia time.
-- Reports: hourly CSV exports, units, timestamps and a preview.
+- Commissioning: equipment- or alarm-linked issues, responsible parties, due dates, overdue filters, and documented verification and closeout.
+- Reports: hourly CSV exports, units, timestamps, a preview and an hourly coverage check.
 - Activity log: recorded operator changes with before/after details where applicable.
 - Settings: account-specific display name, light/dark appearance, Celsius/Fahrenheit, compact tables and energy target.
 - Integrations: disconnected BACnet/Modbus status and the information required for commissioning.
 
 Demo access is available in the local environment and the Vercel SQLite deployment when `BMS_DEMO=true`. It creates a demo operator with a random password; no fixed password is stored in source. Standard account registration is available at `/register`. All workspace pages and changes require authentication. This first version is one shared building workspace; it does not implement tenant isolation or granular operational roles.
+
+For an existing installation, run `php artisan migrate` and `npm run build` to enable the commissioning register and updated screens. Use sample findings in shared demo deployments.
 
 ## Verification
 

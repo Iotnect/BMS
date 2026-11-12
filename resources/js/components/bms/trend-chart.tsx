@@ -1,54 +1,61 @@
-import { type Sample, number } from '@/types/bms';
+import { number } from '@/types/bms';
 import { Area, CartesianGrid, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { Empty } from './controls';
+import { type TrendWindow } from './trend-window';
 
 export function TrendChart({
-    samples,
+    window,
     range,
     metric = 'energy',
     unit = 'C',
 }: {
-    samples: Sample[];
+    window: TrendWindow;
     range: string;
     metric?: 'energy' | 'temperature' | 'humidity';
     unit?: 'C' | 'F';
 }) {
-    if (!samples.length) return <Empty title="No trend samples available">Collect or seed measurements to display a trend.</Empty>;
-    const grouped = new Map<string, { label: string; actual: number; baseline: number; count: number }>();
-    samples.forEach((sample) => {
-        const time = new Date(sample.recorded_at);
-        const key = range === '24h' ? sample.recorded_at : time.toLocaleDateString('en-CA', { timeZone: 'Asia/Kuala_Lumpur' });
+    if (!window.matched) return <Empty title="No trend samples available">No hourly measurements are available for this window.</Empty>;
+    const grouped = new Map<string, { label: string; actual: number; baseline: number; count: number; expected: number }>();
+    window.slots.forEach(({ timestamp, sample }) => {
+        const time = new Date(timestamp);
+        const key = range === '24h' ? time.toISOString() : time.toLocaleDateString('en-CA', { timeZone: 'Asia/Kuala_Lumpur' });
         const label = time.toLocaleString('en-MY', {
             timeZone: 'Asia/Kuala_Lumpur',
             ...(range === '24h' ? { hour: '2-digit', minute: '2-digit', hour12: false } : { day: '2-digit', month: 'short' }),
         });
-        const value =
-            metric === 'energy'
-                ? sample.energy_kwh
-                : metric === 'humidity'
-                  ? sample.humidity
-                  : unit === 'F'
-                    ? (sample.temperature * 9) / 5 + 32
-                    : sample.temperature;
+        const value = !sample
+            ? 0
+            : metric === 'energy'
+              ? sample.energy_kwh
+              : metric === 'humidity'
+                ? sample.humidity
+                : unit === 'F'
+                  ? (sample.temperature * 9) / 5 + 32
+                  : sample.temperature;
         const previous = grouped.get(key);
         grouped.set(key, {
             label,
             actual: (previous?.actual ?? 0) + value,
-            baseline: (previous?.baseline ?? 0) + sample.baseline_kwh,
-            count: (previous?.count ?? 0) + 1,
+            baseline: (previous?.baseline ?? 0) + (sample?.baseline_kwh ?? 0),
+            count: (previous?.count ?? 0) + (sample ? 1 : 0),
+            expected: (previous?.expected ?? 0) + 1,
         });
     });
     const data = [...grouped.values()].map((point) => ({
         ...point,
-        actual: Math.round((metric === 'energy' ? point.actual : point.actual / point.count) * 10) / 10,
-        baseline: Math.round(point.baseline),
+        actual: point.count === point.expected ? Math.round((metric === 'energy' ? point.actual : point.actual / point.count) * 10) / 10 : null,
+        baseline: point.count === point.expected ? Math.round(point.baseline) : null,
     }));
+    const plotted = data.flatMap((point) => (point.actual === null ? [] : [point.actual]));
+    if (!plotted.length)
+        return <Empty title="No complete daily buckets">Choose a shorter period or use Reports to inspect the available hourly records.</Empty>;
+    const gaps = data.length - plotted.length;
     const suffix = metric === 'energy' ? 'kWh' : metric === 'humidity' ? '%' : `°${unit}`;
     return (
         <div
             className="chart-wrap"
             role="img"
-            aria-label={`${metric} trend with ${data.length} ${range === '24h' ? 'hourly' : 'daily'} samples. ${metric === 'energy' ? `Total ${number(samples.reduce((sum, sample) => sum + sample.energy_kwh, 0))} kilowatt hours.` : `Values range from ${number(Math.min(...data.map((p) => p.actual)), 1)} to ${number(Math.max(...data.map((p) => p.actual)), 1)} ${suffix}.`} Use the Reports page to download data.`}
+            aria-label={`${metric} trend with ${plotted.length} plotted ${range === '24h' ? 'hours' : 'daily buckets'} and ${gaps} ${gaps === 1 ? 'gap' : 'gaps'}. Values range from ${number(Math.min(...plotted), 1)} to ${number(Math.max(...plotted), 1)} ${suffix}. Use the Reports page to download data.`}
         >
             <ResponsiveContainer width="100%" height="100%">
                 <ComposedChart data={data} margin={{ top: 12, right: 12, bottom: 0, left: -18 }} accessibilityLayer>
@@ -85,7 +92,8 @@ export function TrendChart({
                             stroke="var(--chart-baseline)"
                             strokeWidth={2}
                             strokeDasharray="5 5"
-                            dot={false}
+                            dot={{ r: 2 }}
+                            connectNulls={false}
                             isAnimationActive={false}
                         />
                     )}
@@ -96,7 +104,8 @@ export function TrendChart({
                         stroke="var(--chart-actual)"
                         fill="var(--chart-fill)"
                         strokeWidth={2.5}
-                        dot={false}
+                        dot={{ r: 2 }}
+                        connectNulls={false}
                         activeDot={{ r: 5 }}
                         isAnimationActive={false}
                     />

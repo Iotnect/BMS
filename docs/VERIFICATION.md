@@ -1,5 +1,15 @@
 # Verification record
 
+## Project engineering update · 12 November 2026
+
+- Laravel passed 37 tests and 247 assertions. The commissioning tests cover authentication, server-side alarm/equipment linking, required closeout evidence, verifier identity, stale edits, reopening and activity logging. An empty trend archive returns an empty preview and a header-only CSV.
+- Playwright passed eight Chromium tests. New flows verify priority ordering, newest-first sorting, return-to-normal details, alarm-linked commissioning, overdue status, saved closeout evidence and keyboard focus return. A missing-reading fixture shows 23 of 24 readings, a chart gap and withheld baseline and target comparisons.
+- TypeScript, the Vite production build, ESLint on changed frontend files and the existing 31 light/dark contrast checks passed. Browser tests checked page overflow at 375, 768, 1024 and 1440 px. The commissioning register and mobile dialog screenshots are in `test-results/`.
+- The register uses the existing workspace panels, readable status labels, labelled controls and form errors. It uses an empty state until a finding is logged and displays saved issue counts directly from the register.
+- The local SQLite database was migrated. Browser verification used an isolated SQLite database and an ephemeral session key. Field hardware and live feeds were outside the verification scope.
+
+## Initial workspace verification
+
 7 November 2026. Tested on Windows with PHP 8.5.12 and Node.js 24.15.0.
 
 ## Automated checks
