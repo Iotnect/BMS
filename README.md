@@ -41,6 +41,25 @@ The default database is SQLite at `database/database.sqlite`. Demo seeding is id
 
 Laragon's Apache/Nginx can also serve the application: configure the virtual host document root as `C:/laragon/www/BMS/public`, enable Laravel's rewrite rules, and update `APP_URL` in `.env` to match the host. Never use the repository root as the web document root.
 
+## Deploy to Vercel
+
+Import the repository with root directory `./` and the **Other** preset. Leave the install, build, and output overrides unset so `vercel.json` can build the static assets and route Laravel requests to the PHP function.
+
+Connect a hosted PostgreSQL database, such as Neon from the Vercel Marketplace. Set these variables for the Vercel environment you deploy:
+
+| Variable | Value |
+| --- | --- |
+| `APP_KEY` | A new key from `php artisan key:generate --show`. Keep the same key across deployments to the same environment. |
+| `APP_URL` | The HTTPS URL for the deployed app. |
+| `APP_ENV` | `production` |
+| `APP_DEBUG` | `false` |
+| `DB_CONNECTION` | `pgsql` |
+| `DATABASE_URL` | The hosted PostgreSQL connection string with `sslmode=require`. Laravel also accepts `DB_URL` and gives it precedence. |
+
+From a trusted machine with Composer dependencies and PHP's `pdo_pgsql` extension installed, set `DB_CONNECTION=pgsql` and `DB_URL` to the target database's direct connection string for the migration process. Run `php artisan migrate --force` once before serving traffic and again when migrations change. For a new demonstration database, run `php artisan db:seed --force` to load the sample data. The Vercel build does not run database migrations or seed data.
+
+Open `/up` to check that Laravel boots, then visit `/register` or `/login` to verify the database-backed session and frontend assets. Production uses normal registration and sign-in.
+
 ## Workspace pages
 
 - Overview: energy consumption, environmental readings, equipment availability, alarm attention list and floor summaries.

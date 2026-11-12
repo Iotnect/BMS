@@ -1,0 +1,8 @@
+/.env*
+/database/*.sqlite*
+/storage/*.key
+/vendor
+/node_modules
+/public/build
+/public/hot
+/tests/e2e.sqlite

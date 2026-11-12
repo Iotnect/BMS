@@ -11,6 +11,7 @@
 /.nova
 /.phpunit.cache
 /.vscode
+/.vercel
 /.zed
 /bootstrap/ssr
 /node_modules
