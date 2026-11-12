@@ -37,7 +37,7 @@ class HandleInertiaRequests extends Middleware
     {
         return array_merge(parent::share($request), [
             'name' => config('app.name'),
-            'demoLoginAvailable' => app()->environment('local') && config('bms.demo'),
+            'demoLoginAvailable' => config('bms.demo') && (app()->environment('local') || config('bms.hosted_demo')),
             'auth' => [
                 'user' => $request->user(),
             ],

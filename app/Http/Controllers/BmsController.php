@@ -45,7 +45,7 @@ class BmsController extends Controller
 
     public function demoLogin(Request $request): RedirectResponse
     {
-        abort_unless(app()->environment('local') && config('bms.demo'), 404);
+        abort_unless(config('bms.demo') && (app()->environment('local') || config('bms.hosted_demo')), 404);
         $user = User::firstOrCreate(['email' => 'demo@bms.local'], ['name' => 'Demo Operator', 'password' => Str::random(64)]);
         Auth::login($user);
         $request->session()->regenerate();

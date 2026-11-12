@@ -1,8 +1,9 @@
-@import 'tailwindcss';
+@import 'tailwindcss' source(none);
 
 @plugin 'tailwindcss-animate';
 
-@source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
+@source '../js';
+@source '../views';
 
 @custom-variant dark (&:is(.dark *));
 

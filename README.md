@@ -45,20 +45,11 @@ Laragon's Apache/Nginx can also serve the application: configure the virtual hos
 
 Import the repository with root directory `./` and the **Other** preset. Leave the install, build, and output overrides unset so `vercel.json` can build the static assets and route Laravel requests to the PHP function.
 
-Connect a hosted PostgreSQL database, such as Neon from the Vercel Marketplace. Set these variables for the Vercel environment you deploy:
+Set `APP_KEY` in Vercel using a new key from `php artisan key:generate --show` and keep it stable across deployments. Set `APP_URL` to the public HTTPS URL.
 
-| Variable | Value |
-| --- | --- |
-| `APP_KEY` | A new key from `php artisan key:generate --show`. Keep the same key across deployments to the same environment. |
-| `APP_URL` | The HTTPS URL for the deployed app. |
-| `APP_ENV` | `production` |
-| `APP_DEBUG` | `false` |
-| `DB_CONNECTION` | `pgsql` |
-| `DATABASE_URL` | The hosted PostgreSQL connection string with `sslmode=require`. Laravel also accepts `DB_URL` and gives it precedence. |
+The build creates a SQLite database with the demo data. Each PHP function instance copies it into writable temporary storage. Demo edits, registrations, and sessions are specific to that instance and can reset when Vercel starts a new instance or deploys a new version.
 
-From a trusted machine with Composer dependencies and PHP's `pdo_pgsql` extension installed, set `DB_CONNECTION=pgsql` and `DB_URL` to the target database's direct connection string for the migration process. Run `php artisan migrate --force` once before serving traffic and again when migrations change. For a new demonstration database, run `php artisan db:seed --force` to load the sample data. The Vercel build does not run database migrations or seed data.
-
-Open `/up` to check that Laravel boots, then visit `/register` or `/login` to verify the database-backed session and frontend assets. Production uses normal registration and sign-in.
+Open `/up` to check that Laravel boots. Visit `/login` and select **Open demo workspace** to verify the seeded dashboard.
 
 ## Workspace pages
 
@@ -72,7 +63,7 @@ Open `/up` to check that Laravel boots, then visit `/register` or `/login` to ve
 - Settings: account-specific display name, light/dark appearance, Celsius/Fahrenheit, compact tables and energy target.
 - Integrations: disconnected BACnet/Modbus status and the information required for commissioning.
 
-Demo access is available only when `APP_ENV=local` and `BMS_DEMO=true`. It creates a local demo operator with a random password; no fixed password is stored in source. Standard account registration is available at `/register`. All workspace pages and changes require authentication. This first version is one shared building workspace; it does not implement tenant isolation or granular operational roles.
+Demo access is available in the local environment and the Vercel SQLite deployment when `BMS_DEMO=true`. It creates a demo operator with a random password; no fixed password is stored in source. Standard account registration is available at `/register`. All workspace pages and changes require authentication. This first version is one shared building workspace; it does not implement tenant isolation or granular operational roles.
 
 ## Verification
 

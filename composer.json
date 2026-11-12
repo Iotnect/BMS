@@ -58,6 +58,11 @@
         ],
         "vercel": [
             "@php artisan package:discover --ansi",
+            "@putenv DB_CONNECTION=sqlite",
+            "@putenv DB_URL=",
+            "@putenv DB_DATABASE=database/vercel-demo.sqlite",
+            "@php -r \"file_exists('database/vercel-demo.sqlite') || touch('database/vercel-demo.sqlite');\"",
+            "@php artisan migrate --seed --force --ansi",
             "npm ci --include=dev --no-audit --no-fund",
             "npm run build"
         ]
