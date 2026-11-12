@@ -1,6 +1,6 @@
 {
     "$schema": "https://getcomposer.org/schema.json",
-    "name": "meridian/bms",
+    "name": "iotnect/bms",
     "type": "project",
     "description": "A building management development workspace with Laravel, React, TypeScript and shadcn/ui.",
     "keywords": [

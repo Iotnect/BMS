@@ -1,4 +1,4 @@
-# Meridian BMS
+# Iotnect BMS
 
 A Laravel 12 application with React 19, TypeScript, Inertia, Tailwind CSS 4, shadcn/ui and Recharts. Created in `C:\laragon\www\BMS`.
 

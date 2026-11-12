@@ -15,7 +15,7 @@ export default function Login({ demoLoginAvailable, status }: { demoLoginAvailab
             <aside className="login-intro">
                 <div className="brand">
                     <span className="brand-name">
-                        meridian
+                        Iotnect BMS
                         <span className="brand-square" />
                     </span>
                     <span className="brand-caption">BUILDING MANAGEMENT</span>

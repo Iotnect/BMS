@@ -14,7 +14,7 @@ export default function AuthSimpleLayout({ children, title, description }: AuthL
                 <div className="flex flex-col gap-8">
                     <div className="flex flex-col items-center gap-4">
                         <Link href={route('home')} className="flex flex-col items-center gap-2 font-medium">
-                            <span className="text-primary text-2xl font-semibold tracking-tight">meridian</span>
+                            <span className="text-primary text-2xl font-semibold tracking-tight">Iotnect BMS</span>
                             <span className="text-muted-foreground text-xs">Building management</span>
                         </Link>
 

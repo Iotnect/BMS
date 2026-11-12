@@ -1142,7 +1142,7 @@ export default function Workspace(props: WorkspaceProps) {
                     )}
                     <footer className="workspace-footer">
                         <span>
-                            Meridian BMS <span> / </span> Development workspace
+                            Iotnect BMS <span> / </span> Development workspace
                         </span>
                         <span>Simulated data · Asia/Kuala_Lumpur</span>
                     </footer>

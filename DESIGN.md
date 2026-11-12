@@ -1,4 +1,4 @@
-# Meridian BMS workspace
+# Iotnect BMS workspace
 
 Schneider reference: EcoStruxure Building Operation WebStation's location hierarchy, alarm views, dashboards, schedules and trend charts. This application is independent and does not use Schneider logos or claim affiliation.
 

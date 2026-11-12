@@ -43,7 +43,7 @@ class BmsController extends Controller
                 ? CommissioningIssue::with(['reporter:id,name', 'verifier:id,name'])->latest('id')->get()
                 : [],
             'schedules' => OperatingSchedule::orderBy('id')->get(),
-            'preferences' => array_merge(['siteName' => 'Meridian Tower', 'theme' => 'light', 'temperatureUnit' => 'C', 'dailyTarget' => 4000, 'compact' => false], $settings ? json_decode($settings, true) : []),
+            'preferences' => array_merge(['siteName' => 'Iotnect Tower', 'theme' => 'light', 'temperatureUnit' => 'C', 'dailyTarget' => 4000, 'compact' => false], $settings ? json_decode($settings, true) : []),
             'activity' => DB::table('activity_logs')->leftJoin('users', 'activity_logs.user_id', '=', 'users.id')->select('activity_logs.*', 'users.name as operator')->orderByDesc('activity_logs.id')->limit(50)->get(),
             'snapshotAt' => $latest ? Carbon::parse($latest)->toISOString() : null,
             'siteDate' => now('Asia/Kuala_Lumpur')->toDateString(),

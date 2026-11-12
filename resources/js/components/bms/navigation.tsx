@@ -49,7 +49,7 @@ export function Navigation({
         <div className="navigation-inner">
             <Link href="/dashboard" className="brand" onClick={onNavigate}>
                 <span className="brand-name">
-                    meridian
+                    Iotnect BMS
                     <span className="brand-square" />
                 </span>
                 <span className="brand-caption">BUILDING MANAGEMENT</span>
