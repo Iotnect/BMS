@@ -11,7 +11,7 @@ declare global {
     const route: typeof routeFn;
 }
 
-const appName = import.meta.env.VITE_APP_NAME || 'Iotnect BMS';
+const appName = document.querySelector<HTMLMetaElement>('meta[name="application-name"]')?.content || 'Iotnect BMS';
 
 createInertiaApp({
     title: (title) => `${title} - ${appName}`,

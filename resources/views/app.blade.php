@@ -4,7 +4,8 @@
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1">
 
-        <title inertia>{{ config('app.name') }}</title>
+        <meta name="application-name" content="{{ config('bms.product_name') }}">
+        <title inertia>{{ config('bms.product_name') }}</title>
 
         @routes
         @viteReactRefresh

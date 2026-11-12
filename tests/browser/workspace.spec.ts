@@ -5,8 +5,10 @@ let demoSession: Awaited<ReturnType<BrowserContext['cookies']>>;
 test.beforeAll(async ({ browser, baseURL }) => {
     const page = await browser.newPage({ baseURL });
     await page.goto('/login');
+    await expect(page).toHaveTitle('Sign in - Iotnect BMS');
     await page.getByRole('button', { name: 'Open demo workspace' }).click();
     await expect(page.getByRole('heading', { name: 'Building overview' })).toBeVisible();
+    await expect(page).toHaveTitle('Building overview - Iotnect BMS');
     demoSession = await page.context().cookies();
     await page.close();
 });
